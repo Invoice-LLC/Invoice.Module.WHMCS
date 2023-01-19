@@ -4,6 +4,7 @@ require "InvoiceSDK/common/SETTINGS.php";
 require "InvoiceSDK/common/ORDER.php";
 require "InvoiceSDK/CREATE_TERMINAL.php";
 require "InvoiceSDK/CREATE_PAYMENT.php";
+require "InvoiceSDK/GET_TERMINAL.php";
 
 function invoice_config()
 {
@@ -26,16 +27,14 @@ function invoice_link($params)
         return '<h1>Возникла ошибка! Обратитесь к администратору</h1>';
     }
 
-    $order = new INVOICE_ORDER($params['amount']);
-    $order->id = $params['invoiceid'];
+    $request = new CREATE_PAYMENT();
+    $request->order = getOrder($params['amount'], $params['invoiceid']);
+    $request->settings = getSettings($tid);
+    $request->receipt = getReceipt();
 
-    $settings = new SETTINGS($tid);
-    $settings->success_url = ( ((!empty($_SERVER['HTTPS'])) ? 'https' : 'http') . '://' . $_SERVER['HTTP_HOST']);
-
-    $request = new CREATE_PAYMENT($order, $settings, []);
     $response = (new RestClient($params['Login'], $params['ApiKey']))->CreatePayment($request);
 
-    if($response == null or isset($response->error)) return '<h1>Возникла ошибка! Обратитесь к администратору</h1>';
+    if ($response == null or isset($response->error)) return '<h1>Возникла ошибка! Обратитесь к администратору</h1>';
 
     $code = '<form method="post" action="' . $response->payment_url . '">
 		<input type="submit" value="' . $_LANG["invoicespaynow"] . '" />
@@ -43,17 +42,63 @@ function invoice_link($params)
     return $code;
 }
 
-function getTerminal($params) {
-    if(!file_exists('invoice_tid')) file_put_contents('invoice_tid', '');
+/**
+ * @return INVOICE_ORDER
+ */
+function getOrder($amount, $id)
+{
+    $order = new INVOICE_ORDER();
+    $order->amount = $amount;
+    $order->id = "$id" . "-" . bin2hex(random_bytes(5));
+    $order->currency = "RUB";
+
+    return $order;
+}
+
+/**
+ * @return SETTINGS
+ */
+function getSettings($terminalId)
+{
+    $url = ((!empty($_SERVER['HTTPS'])) ? 'https' : 'http') . '://' . $_SERVER['HTTP_HOST'];
+
+    $settings = new SETTINGS();
+    $settings->terminal_id = $terminalId;
+    $settings->success_url = $url;
+    $settings->fail_url = $url;
+
+    return $settings;
+}
+
+/**
+ * @return ITEM
+ */
+function getReceipt()
+{
+    $receipt = array();
+
+    return $receipt;
+}
+
+function getTerminal($params)
+{
+    if (!file_exists('invoice_tid')) file_put_contents('invoice_tid', '');
     $tid = file_get_contents('invoice_tid');
-    if($tid == null or empty($tid)) {
-        $request = new CREATE_TERMINAL($params['DefaultTerminalName']);
+    $terminal = new GET_TERMINAL();
+    $terminal->alias =  $tid;
+    $info = (new RestClient($params['Login'], $params['ApiKey']))->GetTerminal($terminal);
+
+    if ($tid == null or empty($tid) || $info->id == null || $info->id != $terminal->alias) {
+        $request = new CREATE_TERMINAL();
+        $request->name = $params['DefaultTerminalName'];
+        $request->type = "dynamical";
+        $request->description = "WHMCS module terminal";
+        $request->defaultPrice = 0;
         $response = (new RestClient($params['Login'], $params['ApiKey']))->CreateTerminal($request);
 
-        if($response == null or isset($response->error)) throw new Exception('Terminal error');
+        if ($response == null or isset($response->error)) throw new Exception('Terminal error');
 
         $tid = $response->id;
-
         file_put_contents('invoice_tid', $tid);
     }
 

@@ -15,26 +15,25 @@ $postData = file_get_contents('php://input');
 $notification = json_decode($postData, true);
 
 $type = $notification["notification_type"];
-$id = $notification["order"]["id"];
+$id = strstr($notification["order"]["id"], "-", true);
 
 $signature = $notification["signature"];
 
-if($signature != md5($notification["id"]. $notification["status"]. $GATEWAY['ApiKey'])) {
+if ($signature != md5($notification["id"] . $notification["status"] . $GATEWAY['ApiKey'])) {
     die('wrong signature');
 }
 
-if($type == "pay") {
+if ($type == "pay") {
 
-    if($notification["status"] == "successful") {
-        addInvoicePayment($id,$notification['id'],$notification['order']['amount'],0,$gatewaymodule);
-        logTransaction($GATEWAY["name"],$_REQUEST['params'],"Successful");
+    if ($notification["status"] == "successful") {
+        addInvoicePayment($id, $notification['id'], $notification['order']['amount'], 0, $gatewaymodule);
+        logTransaction($GATEWAY["name"], $_REQUEST['params'], "Successful");
         die('successful');
     }
-    if($notification["status"] == "error") {
-        logTransaction($GATEWAY["name"],$_REQUEST['params'],"Successful");
+    if ($notification["status"] == "error") {
+        logTransaction($GATEWAY["name"], $_REQUEST['params'], "Successful");
         die('failed');
     }
 }
 
 die('null');
-
